@@ -1,0 +1,31 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background: url("bg.png") no-repeat center center fixed;
+    background-size: cover;
+    font-family: monospace;
+    color: white;
+    text-shadow: 1px 1px 3px black;
+}
+
+#lab {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+#microbe {
+    position: absolute;
+    width: 150px;
+    transition: transform 0.3s ease;
+}
+
+#phrase {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    font-size: 18px;
+    background: rgba(0,0,0,0.5);
+    padding: 8px;
+    border-radius: 5px;
+}

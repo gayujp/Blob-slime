@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8" />
+  <title>Bio-Quantum Microbial Simulation Interface</title>
+  <style>
+    body {
+      margin: 0;
+      background: linear-gradient(90deg, #001f3f, #0074D9);
+      font-family: monospace;
+      color: #00ffcc;
+      overflow: hidden;
+      height: 100vh;
+      position: relative;
+    }
+    #microbe, .microbe-clone {
+      position: absolute;
+      width: 240px;
+      transition: transform 0.4s ease, left 0.8s ease, top 0.8s ease, opacity 0.5s ease;
+      cursor: pointer;
+      left: 0;
+      top: 0;
+      z-index: 10;
+      filter: drop-shadow(0 0 25px hsl(180, 90%, 50%));
+    }
+    #microbeSpeechBubble {
+      position: absolute;
+      background: rgba(0,0,0,0.9);
+      border: 2px solid #00ffcc;
+      border-radius: 15px;
+      padding: 18px 22px;
+      font-weight: bold;
+      font-size: 1.3em;
+      color: #00ffcc;
+      max-width: 280px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      z-index: 20;
+      user-select: none;
+    }
+    #controlPanel {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.85);
+      padding: 20px 25px;
+      border-radius: 12px;
+      font-size: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      z-index: 20;
+      width: 220px;
+    }
+    #phrase {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 1.3em;
+      color: #fff;
+      max-width: 80%;
+      text-align: center;
+      border: 1px solid #00ffcc;
+      z-index: 20;
+      user-select: none;
+    }
+    input[type=range] {
+      width: 100%;
+      height: 30px;
+      -webkit-appearance: none;
+      background: #003366;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 30px;
+      height: 30px;
+      background: #00ffcc;
+      border-radius: 50%;
+      border: 2px solid #0074D9;
+      cursor: pointer;
+      margin-top: -12px;
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 30px;
+      height: 30px;
+      background: #00ffcc;
+      border-radius: 50%;
+      border: 2px solid #0074D9;
+      cursor: pointer;
+    }
+    #simulationCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      z-index: 1;
+      pointer-events: none;
+    }
+    /* Black overlay for screen blanking */
+    #screenOverlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background-color: black;
+      opacity: 1;
+      z-index: 9999;
+      pointer-events: none;
+      display: none; /* hidden by default */
+    }
+  </style>
+</head>
+<body>
+  <canvas id="simulationCanvas"></canvas>
+  <img id="microbe" src="microbe.png" alt="Genetically Modified Particle" />
+  <div id="microbeSpeechBubble"></div>
+  <div id="controlPanel">
+    <label>pH Level:
+      <input type="range" id="phSlider" min="0" max="14" value="7" step="0.1" />
+    </label>
+    <label>Temperature:
+      <input type="range" id="tempSlider" min="0" max="100" value="25" step="0.1" />
+    </label>
+  </div>
+
+  <!-- Black overlay div -->
+  <div id="screenOverlay"></div>
+
+<script>
+  const microbe = document.getElementById("microbe");
+  const bubble = document.getElementById("microbeSpeechBubble");
+  const pHSlider = document.getElementById("phSlider");
+  const tempSlider = document.getElementById("tempSlider");
+  const canvas = document.getElementById("simulationCanvas");
+  const ctx = canvas.getContext("2d");
+  const screenOverlay = document.getElementById('screenOverlay');
+
+  // Resize canvas to full window
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  // Background particles
+  class Particle {
+    constructor() {
+      this.x = Math.random() * canvas.width;
+      this.y = Math.random() * canvas.height;
+      this.radius = 1 + Math.random() * 2;
+      this.speedX = (Math.random() - 0.5) * 0.3;
+      this.speedY = (Math.random() - 0.5) * 0.3;
+      this.alpha = 0.1 + Math.random() * 0.3;
+    }
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      if (this.x < 0) this.x = canvas.width;
+      else if (this.x > canvas.width) this.x = 0;
+      if (this.y < 0) this.y = canvas.height;
+      else if (this.y > canvas.height) this.y = 0;
+    }
+    draw() {
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(0, 255, 204, ${this.alpha})`;
+      ctx.shadowColor = `rgba(0, 255, 204, ${this.alpha})`;
+      ctx.shadowBlur = 6;
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  const particles = [];
+  const PARTICLE_COUNT = 120;
+  for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+
+  // Neural activity graph config
+  const graphHeight = 120;
+  const graphWidth = 350;
+  const graphX = 20;
+  let graphY = window.innerHeight - graphHeight - 20;
+
+  const dataPointsCount = 50;
+  const maxDataValue = 100;
+
+  let dataPoints = new Array(dataPointsCount).fill(0).map(() => Math.random() * maxDataValue);
+
+  function updateData() {
+    const pH = parseFloat(pHSlider.value);
+    const temp = parseFloat(tempSlider.value);
+    let baseActivity = 50 + 20 * Math.sin(Date.now() / 3000);
+    let noise = Math.random() * 30;
+    const newValue = Math.min(
+      maxDataValue,
+      Math.max(0, baseActivity + noise + (pH - 7) * 4 + (temp - 25) * 0.6)
+    );
+    dataPoints.push(newValue);
+    if (dataPoints.length > dataPointsCount) dataPoints.shift();
+  }
+
+  function drawGraph() {
+    ctx.save();
+    ctx.translate(graphX, graphY);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(0, 0, graphWidth, graphHeight);
+    ctx.strokeStyle = '#00ffcc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, graphHeight);
+    ctx.lineTo(graphWidth, graphHeight);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.lineWidth = 2;
+    const pH = parseFloat(pHSlider.value);
+    const temp = parseFloat(tempSlider.value);
+    const hueShift = (pH * 27.314 + temp * 3.14159) % 360;
+    ctx.strokeStyle = `hsl(${hueShift}, 90%, 60%)`;
+
+    const spacing = graphWidth / (dataPointsCount - 1);
+    ctx.moveTo(0, graphHeight - (dataPoints[0] / maxDataValue) * graphHeight);
+    for (let i = 1; i < dataPointsCount; i++) {
+      const x = i * spacing;
+      const y = graphHeight - (dataPoints[i] / maxDataValue) * graphHeight;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  window.addEventListener("resize", () => {
+    graphY = window.innerHeight - graphHeight - 20;
+  });
+
+  // Speech bubble messages for the microbe
+  const funnyMessages = [
+    "I'm the coolest microbe in the universe!",
+    "Watch me dance, I’ve got no rhythm but style!",
+    "Double click me to clone my awesomeness!",
+    "Touch my ph to make me glow!",
+    "Warning: Quantum flux may cause giggles.",
+    "Just a microbe with mega moves!",
+    "I replicate myself... and my jokes!",
+    "Dancing my way through your CPU!",
+  ];
+
+  let speechTimeout = null;
+
+  function showSpeech(text) {
+    const rect = microbe.getBoundingClientRect();
+    bubble.textContent = text;
+
+    // Position bubble right or left of microbe depending on screen space
+    let x = rect.right + 15;
+    let y = rect.top + rect.height / 4;
+
+    if (x + bubble.offsetWidth > window.innerWidth) {
+      x = rect.left - bubble.offsetWidth - 15;
+    }
+    if (y + bubble.offsetHeight > window.innerHeight) {
+      y = window.innerHeight - bubble.offsetHeight - 15;
+    }
+
+    bubble.style.left = x + "px";
+    bubble.style.top = y + "px";
+    bubble.style.opacity = "1";
+
+    if (speechTimeout) clearTimeout(speechTimeout);
+    speechTimeout = setTimeout(() => {
+      bubble.style.opacity = "0";
+    }, 5000);
+  }
+
+  // Voice synthesis helper
+  function speakText(text) {
+    if (!window.speechSynthesis) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  }
+
+  let isDancing = false;
+
+  // Move microbe randomly inside window bounds (considering control panel width)
+  function moveMicrobeRandomly() {
+    if (isDancing) return;
+
+    const padding = 260;  // margin for microbe size
+    const controlPanelWidth = 240;
+    const maxX = window.innerWidth - padding - controlPanelWidth;
+    const maxY = window.innerHeight - padding - 140;
+    const x = padding + Math.random() * (maxX - padding);
+    const y = 50 + Math.random() * (maxY - 50);
+
+    microbe.style.transition = "left 0.8s ease, top 0.8s ease";
+    microbe.style.left = `${x}px`;
+    microbe.style.top = `${y}px`;
+    microbe.style.transform = "translate(0, 0) scale(1) rotate(0deg)";
+  }
+
+  // Color & filter adjustment based on pH and temperature sliders
+  function updateMicrobeColor() {
+    const pH = parseFloat(pHSlider.value);
+    const temp = parseFloat(tempSlider.value);
+    const hueShift = (pH * 27.314 + temp * 3.14159) % 360;
+    microbe.style.filter = `hue-rotate(${hueShift}deg) drop-shadow(0 0 25px hsl(${hueShift}, 90%, 50%))`;
+  }
+
+  // Dancing animation - goofy moves
+  function danceMicrobe() {
+    if (isDancing) return;
+    isDancing = true;
+
+    const danceSteps = [
+      { transform: "translate(20px, -15px) rotate(15deg) scale(1.3)", duration: 300 },
+      { transform: "translate(-20px, 15px) rotate(-15deg) scale(1.4)", duration: 300 },
+      { transform: "translate(15px, 10px) rotate(25deg) scale(1.2)", duration: 300 },
+      { transform: "translate(-15px, -10px) rotate(-20deg) scale(1.3)", duration: 300 },
+      { transform: "translate(0, 0) rotate(0deg) scale(1)", duration: 400 },
+    ];
+
+    let index = 0;
+
+    function nextStep() {
+      if (index >= danceSteps.length) {
+        isDancing = false;
+        moveMicrobeRandomly();
+        return;
+      }
+      const step = danceSteps[index];
+      microbe.style.transition = `transform ${step.duration}ms ease-in-out`;
+      microbe.style.transform = step.transform;
+      index++;
+
+      setTimeout(nextStep, step.duration);
+    }
+
+    nextStep();
+
+    // Show a random funny speech bubble when dancing starts
+    const msg = funnyMessages[Math.floor(Math.random() * funnyMessages.length)];
+    showSpeech(msg);
+    speakText(msg);
+  }
+
+  // Cloning animation - creates a temporary clone that dances and disappears
+  function cloneMicrobe() {
+    if (isDancing) return; // no cloning while dancing
+
+    const clone = document.createElement("img");
+    clone.src = microbe.src;
+    clone.className = "microbe-clone";
+    clone.style.left = microbe.style.left;
+    clone.style.top = microbe.style.top;
+    clone.style.filter = microbe.style.filter;
+    document.body.appendChild(clone);
+
+    const cloneDanceSteps = [
+      { transform: "translate(30px, -20px) rotate(20deg) scale(1.2)", duration: 250 },
+      { transform: "translate(-30px, 20px) rotate(-20deg) scale(1.3)", duration: 250 },
+      { transform: "translate(20px, 10px) rotate(15deg) scale(1.1)", duration: 250 },
+      { transform: "translate(0, 0) rotate(0deg) scale(1)", duration: 250 },
+    ];
+
+    let index = 0;
+
+    function cloneDance() {
+      if (index >= cloneDanceSteps.length) {
+        clone.style.opacity = "0";
+        setTimeout(() => clone.remove(), 500);
+        return;
+      }
+      const step = cloneDanceSteps[index];
+      clone.style.transition = `transform ${step.duration}ms ease-in-out, opacity 0.5s ease`;
+      clone.style.transform = step.transform;
+      index++;
+      setTimeout(cloneDance, step.duration);
+    }
+
+    cloneDance();
+
+    const cloneMessage = "Double trouble! I cloned myself!";
+    showSpeech(cloneMessage);
+    speakText(cloneMessage);
+  }
+
+  // Events
+  microbe.addEventListener("click", danceMicrobe);
+  microbe.addEventListener("dblclick", cloneMicrobe);
+
+  // Auto-move microbe every 3 seconds if not dancing
+  let autoMoveInterval = setInterval(() => {
+    if (!isDancing) moveMicrobeRandomly();
+  }, 3000);
+
+  // Update microbe color & graph data regularly
+  let updateInterval = setInterval(() => {
+    updateMicrobeColor();
+    updateData();
+  }, 2000);
+
+  // Animate background particles and graph
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => { p.update(); p.draw(); });
+    drawGraph();
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  // Initialize position and color
+  moveMicrobeRandomly();
+  updateMicrobeColor();
+
+  // Control animations start/stop for overlay usage
+  function stopAnimations() {
+    clearInterval(autoMoveInterval);
+    clearInterval(updateInterval);
+  }
+
+  function startAnimations() {
+    autoMoveInterval = setInterval(() => {
+      if (!isDancing) moveMicrobeRandomly();
+    }, 3000);
+
+    updateInterval = setInterval(() => {
+      updateMicrobeColor();
+      updateData();
+    }, 2000);
+  }
+
+  // Show/hide overlay
+  function showOverlay() {
+    screenOverlay.style.display = 'block';
+  }
+
+  function hideOverlay() {
+    screenOverlay.style.display = 'none';
+  }
+
+  // On pH slider interaction: black screen for 5 seconds, then back
+  pHSlider.addEventListener('mousedown', () => {
+    stopAnimations();
+    showOverlay();
+    setTimeout(() => {
+      hideOverlay();
+      startAnimations();
+    }, 5000);
+  });
+  pHSlider.addEventListener('touchstart', () => {
+    stopAnimations();
+    showOverlay();
+    setTimeout(() => {
+      hideOverlay();
+      startAnimations();
+    }, 5000);
+  });
+
+</script>
+</body>
+</html>
